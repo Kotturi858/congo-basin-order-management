@@ -34,7 +34,7 @@ public class OrderItem {
     @Column(nullable = false)
     private Double subtotal;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)// is this necessary? for an order Item creation?
     @JoinColumn(name = "order_id", nullable = false)
     @JsonBackReference
     private Order order;
