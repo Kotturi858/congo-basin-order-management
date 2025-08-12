@@ -32,8 +32,7 @@ public class OrderService {
 
 
     @Autowired
-    public OrderService(OrderRepository orderRepository, OrderItemRepository orderItemRepository,
-                        RestTemplate restTemplate, ProductPriceService productPriceService) {
+    public OrderService(OrderRepository orderRepository, OrderItemRepository orderItemRepository, RestTemplate restTemplate, ProductPriceService productPriceService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.restTemplate = restTemplate;
@@ -51,12 +50,12 @@ public class OrderService {
         order.setUpdatedAt(LocalDateTime.now());
 
         double totalAmount = 0.0;
-        for( OrderItem item : order.getItems()) {
+        for (OrderItem item : order.getItems()) {
             Double unitPrice = productPriceService.getProductPrice(item.getProductId());
             totalAmount += item.getQuantity() * unitPrice;
         }
 
-        if(totalAmount != order.getTotalAmount()){
+        if (totalAmount != order.getTotalAmount()) {
             throw new IllegalArgumentException("Total amount does not match the sum of item prices.");
         }
         order.setTotalAmount(totalAmount);
@@ -76,33 +75,61 @@ public class OrderService {
                 orderItemRepository.save(item);
             }
         }
-        double totalAmount1 = order.getItems().stream()
-                .filter(e -> e.getIsAvailable() == true)
-                .mapToDouble(OrderItem::getSubtotal).sum();
+        double totalAmount1 = order.getItems().stream().filter(e -> e.getIsAvailable() == true).mapToDouble(OrderItem::getSubtotal).sum();
 
         // Update the order with the payment status and total amount
         order.setTotalAmount(totalAmount1);
         orderRepository.save(savedOrder);
 
+        boolean isPaymentSuccess = makePayment(savedOrder);
+
+        if (!isPaymentSuccess) {
+            releaseStock(order.getItems());
+//          savedOrder.setStatus("PAYMENT FAILED");
+        }
         return savedOrder;
+    }
+
+    private void releaseStock(List<OrderItem> items) {
+        for (OrderItem item : items) {
+            if (item.getIsAvailable()) {
+                try {
+                    HttpHeaders headers = new HttpHeaders();
+                    StockReservationRequest request = new StockReservationRequest(item.getProductId(), item.getQuantity(), item.getId().toString());
+                    HttpEntity<StockReservationRequest> entity = new HttpEntity<>(request, headers);
+                    restTemplate.exchange("http://localhost:8082/inventory/release", HttpMethod.POST, entity, String.class);
+                } catch (HttpClientErrorException | HttpServerErrorException e) {
+                    //implement a retry mechanism or log the error with exponential backoff
+                    // else implement
+                    System.err.println("Error releasing stock for order item: " + item.getId() + " - " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private boolean makePayment(Order order) {
+        System.out.println("Processing payment for order ID: " + order.getId() + ", Amount: " + order.getTotalAmount());
+        Boolean isPaymentRecieved = restTemplate.getForObject("http://localhost:8084/api/fakePayment", Boolean.class);
+        System.out.println("Payment status for order ID " + order.getId() + ": " + (Boolean.TRUE.equals(isPaymentRecieved) ? "Success" : "Failed"));
+
+        if (Boolean.TRUE.equals(isPaymentRecieved)) {
+            order.setStatus("PAID");
+        } else {
+            order.setStatus("PAYMENT FAILED");
+        }
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+        return Boolean.TRUE.equals(isPaymentRecieved);
     }
 
     private Boolean reserveStock(OrderItem order) {
         try {
             HttpHeaders headers = new HttpHeaders();
 
-            StockReservationRequest request = new StockReservationRequest(
-                    order.getProductId(),
-                    order.getQuantity(),
-                    order.getId().toString()
-            );
+            StockReservationRequest request = new StockReservationRequest(order.getProductId(), order.getQuantity(), order.getId().toString());
             HttpEntity<StockReservationRequest> entity = new HttpEntity<>(request, headers);
 
-            ResponseEntity<String> response = restTemplate.exchange(
-                    "http://localhost:8082/inventory/reserve",
-                    HttpMethod.POST,
-                    entity,
-                    String.class);
+            ResponseEntity<String> response = restTemplate.exchange("http://localhost:8082/inventory/reserve", HttpMethod.POST, entity, String.class);
 
             String body = response.getBody();
 
@@ -111,8 +138,7 @@ public class OrderService {
                 return dto.isStockAvailable();
             } catch (Exception e) {
                 // Not JSON DTO
-                System.out.println("Failed to parse response: " + e.getMessage()
-                        + ". Response body: " + body);
+                System.out.println("Failed to parse response: " + e.getMessage() + ". Response body: " + body);
                 return false;
             }
 
