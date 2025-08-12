@@ -1,11 +1,11 @@
 package com.order.management.service.orders_management_service.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.Getter;
+import lombok.*;
 
 @Data
+@NoArgsConstructor
 @AllArgsConstructor
+@Setter
 @Getter
 public class InventoryItemDTO {
     private String productId;
@@ -13,5 +13,6 @@ public class InventoryItemDTO {
     private Integer stockQuantity;
     private Integer reservedQuantity;
     private Integer lowStockThreshold;
-    private Boolean isStockAvailable;
+    private boolean isStockAvailable;
+    private Double price;
 }

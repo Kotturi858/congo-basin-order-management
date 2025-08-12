@@ -1,6 +1,7 @@
 package com.order.management.service.orders_management_service.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.order.management.service.orders_management_service.Cache.ProductPriceService;
 import com.order.management.service.orders_management_service.dto.InventoryItemDTO;
 import com.order.management.service.orders_management_service.dto.StockReservationRequest;
 import com.order.management.service.orders_management_service.model.Order;
@@ -27,13 +28,16 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final RestTemplate restTemplate;
+    private final ProductPriceService productPriceService;
 
 
     @Autowired
-    public OrderService(OrderRepository orderRepository, OrderItemRepository orderItemRepository, RestTemplate restTemplate) {
+    public OrderService(OrderRepository orderRepository, OrderItemRepository orderItemRepository,
+                        RestTemplate restTemplate, ProductPriceService productPriceService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.restTemplate = restTemplate;
+        this.productPriceService = productPriceService;
     }
 
     @Transactional
@@ -43,26 +47,42 @@ public class OrderService {
             throw new IllegalArgumentException("Order must have a customer ID and at least one item.");
         }
 
+        order.setCreatedAt(LocalDateTime.now());
+        order.setUpdatedAt(LocalDateTime.now());
+
+        double totalAmount = 0.0;
+        for( OrderItem item : order.getItems()) {
+            Double unitPrice = productPriceService.getProductPrice(item.getProductId());
+            totalAmount += item.getQuantity() * unitPrice;
+        }
+
+        if(totalAmount != order.getTotalAmount()){
+            throw new IllegalArgumentException("Total amount does not match the sum of item prices.");
+        }
+        order.setTotalAmount(totalAmount);
+
         // Save the order first
         Order savedOrder = orderRepository.save(order);
-        List<OrderItem> items = new ArrayList<OrderItem>();
 
         // Set the order reference for each item and save them
-        if (order.getItems() != null) {
-            for (OrderItem item : order.getItems()) {
-                item.setOrder(savedOrder);
-                OrderItem orderItem = orderItemRepository.save(item);
-                // Reserve stock for the order
-                Boolean isStockAvailable = reserveStock(orderItem);
-                if (!isStockAvailable) {
-                    // If stock is not available, mark the order as failed
-                    savedOrder.setStatus("FAILED");
-                    savedOrder.setUpdatedAt(LocalDateTime.now());
-                    orderRepository.save(savedOrder);
-                    throw new IllegalStateException("Insufficient stock for product ID: " + item.getProductId());
-                }
+        for (OrderItem item : order.getItems()) {
+            item.setOrder(savedOrder);
+            OrderItem orderItem = orderItemRepository.save(item);
+            // Reserve stock for the order
+            Boolean isStockAvailable = reserveStock(orderItem);
+            if (!isStockAvailable) {
+                // If stock is not available, mark the order as failed
+                item.setIsAvailable(false);
+                orderItemRepository.save(item);
             }
         }
+        double totalAmount1 = order.getItems().stream()
+                .filter(e -> e.getIsAvailable() == true)
+                .mapToDouble(OrderItem::getSubtotal).sum();
+
+        // Update the order with the payment status and total amount
+        order.setTotalAmount(totalAmount1);
+        orderRepository.save(savedOrder);
 
         return savedOrder;
     }
@@ -88,9 +108,11 @@ public class OrderService {
 
             try {
                 InventoryItemDTO dto = new ObjectMapper().readValue(body, InventoryItemDTO.class);
-                return dto.getIsStockAvailable();
+                return dto.isStockAvailable();
             } catch (Exception e) {
                 // Not JSON DTO
+                System.out.println("Failed to parse response: " + e.getMessage()
+                        + ". Response body: " + body);
                 return false;
             }
 
