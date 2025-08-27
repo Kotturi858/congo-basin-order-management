@@ -97,10 +97,11 @@ public class OrderService {
                     HttpHeaders headers = new HttpHeaders();
                     StockReservationRequest request = new StockReservationRequest(item.getProductId(), item.getQuantity(), item.getId().toString());
                     HttpEntity<StockReservationRequest> entity = new HttpEntity<>(request, headers);
-                    restTemplate.exchange("http://localhost:8082/inventory/release", HttpMethod.POST, entity, String.class);
+                    restTemplate.exchange("http://inventory-management-service/inventory/release", HttpMethod.POST, entity, String.class);
                 } catch (HttpClientErrorException | HttpServerErrorException e) {
                     //implement a retry mechanism or log the error with exponential backoff
                     // else implement
+                    //a scheduler to check whether the stock is released in the inventory service
                     System.err.println("Error releasing stock for order item: " + item.getId() + " - " + e.getMessage());
                 }
             }
@@ -109,7 +110,7 @@ public class OrderService {
 
     private boolean makePayment(Order order) {
         System.out.println("Processing payment for order ID: " + order.getId() + ", Amount: " + order.getTotalAmount());
-        Boolean isPaymentRecieved = restTemplate.getForObject("http://localhost:8084/api/fakePayment", Boolean.class);
+        Boolean isPaymentRecieved = restTemplate.getForObject("http://CONGO-BASIN-PAYMENT-SERVICE/api/fakePayment", Boolean.class);
         System.out.println("Payment status for order ID " + order.getId() + ": " + (Boolean.TRUE.equals(isPaymentRecieved) ? "Success" : "Failed"));
 
         if (Boolean.TRUE.equals(isPaymentRecieved)) {
@@ -129,7 +130,7 @@ public class OrderService {
             StockReservationRequest request = new StockReservationRequest(order.getProductId(), order.getQuantity(), order.getId().toString());
             HttpEntity<StockReservationRequest> entity = new HttpEntity<>(request, headers);
 
-            ResponseEntity<String> response = restTemplate.exchange("http://localhost:8082/inventory/reserve", HttpMethod.POST, entity, String.class);
+            ResponseEntity<String> response = restTemplate.exchange("http://inventory-management-service/inventory/reserve", HttpMethod.POST, entity, String.class);
 
             String body = response.getBody();
 
