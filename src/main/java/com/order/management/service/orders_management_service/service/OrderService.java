@@ -1,16 +1,15 @@
 package com.order.management.service.orders_management_service.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.order.management.service.orders_management_service.Cache.ProductPriceService;
-import com.order.management.service.orders_management_service.dto.InventoryItemDTO;
 import com.order.management.service.orders_management_service.dto.StockReservationRequest;
 import com.order.management.service.orders_management_service.model.Order;
 import com.order.management.service.orders_management_service.model.OrderItem;
-import com.order.management.service.orders_management_service.repository.OrderRepository;
 import com.order.management.service.orders_management_service.repository.OrderItemRepository;
-
+import com.order.management.service.orders_management_service.repository.OrderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
@@ -18,7 +17,6 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,6 +36,9 @@ public class OrderService {
         this.restTemplate = restTemplate;
         this.productPriceService = productPriceService;
     }
+
+    @Autowired
+    private CircuitBreakers self;
 
     @Transactional
     public Order createOrder(Order order) {
@@ -68,7 +69,7 @@ public class OrderService {
             item.setOrder(savedOrder);
             OrderItem orderItem = orderItemRepository.save(item);
             // Reserve stock for the order
-            Boolean isStockAvailable = reserveStock(orderItem);
+            Boolean isStockAvailable = self.reserveStock(orderItem);
             if (!isStockAvailable) {
                 // If stock is not available, mark the order as failed
                 item.setIsAvailable(false);
@@ -121,33 +122,6 @@ public class OrderService {
         order.setUpdatedAt(LocalDateTime.now());
         orderRepository.save(order);
         return Boolean.TRUE.equals(isPaymentRecieved);
-    }
-
-    private Boolean reserveStock(OrderItem order) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-
-            StockReservationRequest request = new StockReservationRequest(order.getProductId(), order.getQuantity(), order.getId().toString());
-            HttpEntity<StockReservationRequest> entity = new HttpEntity<>(request, headers);
-
-            ResponseEntity<String> response = restTemplate.exchange("http://inventory-management-service/inventory/reserve", HttpMethod.POST, entity, String.class);
-
-            String body = response.getBody();
-
-            try {
-                InventoryItemDTO dto = new ObjectMapper().readValue(body, InventoryItemDTO.class);
-                return dto.isStockAvailable();
-            } catch (Exception e) {
-                // Not JSON DTO
-                System.out.println("Failed to parse response: " + e.getMessage() + ". Response body: " + body);
-                return false;
-            }
-
-        } catch (HttpClientErrorException | HttpServerErrorException e) {
-            // mark the order as failed if stock reservation fails
-            System.err.println("Error reserving stock for order item: " + order.getId() + " - " + e.getMessage());
-            return false;
-        }
     }
 
     @Transactional(readOnly = true)
