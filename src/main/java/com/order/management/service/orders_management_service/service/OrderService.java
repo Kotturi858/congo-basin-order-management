@@ -27,18 +27,16 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final RestTemplate restTemplate;
     private final ProductPriceService productPriceService;
-
+    private final CircuitBreakers circuitBreakers;
 
     @Autowired
-    public OrderService(OrderRepository orderRepository, OrderItemRepository orderItemRepository, RestTemplate restTemplate, ProductPriceService productPriceService) {
+    public OrderService(OrderRepository orderRepository, OrderItemRepository orderItemRepository, RestTemplate restTemplate, ProductPriceService productPriceService, CircuitBreakers circuitBreakers) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.restTemplate = restTemplate;
         this.productPriceService = productPriceService;
+        this.circuitBreakers = circuitBreakers;
     }
-
-    @Autowired
-    private CircuitBreakers self;
 
     @Transactional
     public Order createOrder(Order order) {
@@ -69,7 +67,7 @@ public class OrderService {
             item.setOrder(savedOrder);
             OrderItem orderItem = orderItemRepository.save(item);
             // Reserve stock for the order
-            Boolean isStockAvailable = self.reserveStock(orderItem);
+            Boolean isStockAvailable = circuitBreakers.reserveStock(orderItem);
             if (!isStockAvailable) {
                 // If stock is not available, mark the order as failed
                 item.setIsAvailable(false);
@@ -86,7 +84,6 @@ public class OrderService {
 
         if (!isPaymentSuccess) {
             releaseStock(order.getItems());
-//          savedOrder.setStatus("PAYMENT FAILED");
         }
         return savedOrder;
     }
