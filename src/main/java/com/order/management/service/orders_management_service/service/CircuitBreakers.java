@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.order.management.service.orders_management_service.dto.InventoryItemDTO;
 import com.order.management.service.orders_management_service.dto.StockReservationRequest;
 import com.order.management.service.orders_management_service.model.OrderItem;
+import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -21,6 +24,9 @@ public class CircuitBreakers {
         this.restTemplate = restTemplate;
     }
 
+    @Retry(name = "InventoryRetry", fallbackMethod = "retryFallback")
+    @TimeLimiter(name = "InventoryTimeout", fallbackMethod = "timeoutFallback")
+    @Bulkhead(name = "reserveStockBulkhead", fallbackMethod = "reserveStockBHFallback", type = Bulkhead.Type.THREADPOOL)
     @CircuitBreaker(name = "orderService", fallbackMethod = "reserveStockFallback")
     public Boolean reserveStock(OrderItem order) {
         System.out.println("Attempting to reserve stock for order item: " + order.getId());
@@ -47,4 +53,20 @@ public class CircuitBreakers {
         System.err.println("Inventory service is down. Fallback method invoked for order item: " + order.getId() + " - " + t.getMessage());
         return false;
     }
+
+    public Boolean reserveStockBHFallback(OrderItem order, Throwable t) {
+        System.err.println("Inventory service is busy, please try again later for order " + order.getId());
+        return false;
+    }
+
+    private Boolean retryFallback(Exception ex) {
+        System.err.println("Fallback due to exempted retry limit: " + ex.getMessage());
+        return false;
+    }
+
+    private Boolean timeoutFallback(Exception ex) {
+        System.err.println("Fallback due to timeout");
+        return false;
+    }
+
 }

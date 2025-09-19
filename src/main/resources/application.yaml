@@ -13,3 +13,23 @@ resilience4j:
         waitDurationInOpenState: 10s
         permittedNumberOfCallsInHalfOpenState: 3
         minimumNumberOfCalls: 3
+  bulkhead:
+    instances:
+      reserveStockBulkhead:
+        maxConcurrentCalls: 10
+        maxWaitDuration: 500ms
+  retry:
+    instances:
+      InventoryRetry:
+        max-attempts: 3        # total calls = 1 original + 2 retries
+        wait-duration: 500ms   # wait before retrying
+        retry-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignore-exceptions:
+          - com.example.demo.exception.BusinessException # replace with your actual exception
+  timelimiter:
+    instances:
+      InventoryTimeout:
+        timeout-duration: 5s
+        cancel-running-future: true
