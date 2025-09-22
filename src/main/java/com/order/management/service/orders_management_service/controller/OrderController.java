@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/")
+@RequestMapping("/orders")
 public class OrderController {
 
     private final OrderService orderService;
@@ -25,7 +25,7 @@ public class OrderController {
      * @param order The order to create
      * @return The created order with generated ID
      */
-    @PostMapping("/orders")
+    @PostMapping
     public ResponseEntity<Order> createOrder(@RequestBody Order order) {
         Order createdOrder = orderService.createOrder(order);
         return new ResponseEntity<>(createdOrder, HttpStatus.CREATED);
@@ -37,7 +37,7 @@ public class OrderController {
      * @param id The ID of the order to retrieve
      * @return The order if found
      */
-    @GetMapping("/orders/{id}")
+    @GetMapping("/{id}")
     public ResponseEntity<Order> getOrderById(@PathVariable Long id) {
         Order order = orderService.getOrderById(id);
         if (order != null) {
@@ -53,7 +53,7 @@ public class OrderController {
      * @param id The customer ID
      * @return List of orders for the customer
      */
-    @GetMapping("/customers/{id}/orders")
+    @GetMapping("/customers/{id}")
     public ResponseEntity<List<Order>> getOrdersByCustomerId(@PathVariable Long id) {
         List<Order> customerOrders = orderService.getOrdersByCustomerId(id);
         return new ResponseEntity<>(customerOrders, HttpStatus.OK);
@@ -66,7 +66,7 @@ public class OrderController {
      * @param request The status update request
      * @return The updated order
      */
-    @PutMapping("/orders/{id}/status")
+    @PutMapping("/{id}/status")
     public ResponseEntity<Order> updateOrderStatus(
             @PathVariable Long id,
             @RequestBody OrderStatusUpdateRequest request) {

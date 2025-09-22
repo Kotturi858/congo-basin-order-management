@@ -7,7 +7,6 @@ import com.order.management.service.orders_management_service.model.OrderItem;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -25,17 +24,20 @@ public class CircuitBreakers {
     }
 
     @Retry(name = "InventoryRetry", fallbackMethod = "retryFallback")
-    @TimeLimiter(name = "InventoryTimeout", fallbackMethod = "timeoutFallback")
-    @Bulkhead(name = "reserveStockBulkhead", fallbackMethod = "reserveStockBHFallback", type = Bulkhead.Type.THREADPOOL)
+    /*@TimeLimiter cannot be used with synchronous return types like Boolean.
+     * You must return a CompletableFuture<Boolean> (or CompletionStage<Boolean>)
+     */
+//  @TimeLimiter(name = "InventoryTimeout", fallbackMethod = "timeoutFallback")
+    @Bulkhead(name = "reserveStockBulkhead", fallbackMethod = "reserveStockBHFallback", type = Bulkhead.Type.SEMAPHORE)
     @CircuitBreaker(name = "orderService", fallbackMethod = "reserveStockFallback")
     public Boolean reserveStock(OrderItem order) {
-        System.out.println("Attempting to reserve stock for order item: " + order.getId());
+        System.out.println("Attempting to reserve stock for order item: " + order.getProductName());
         HttpHeaders headers = new HttpHeaders();
 
         StockReservationRequest request = new StockReservationRequest(order.getProductId(), order.getQuantity(), order.getId().toString());
         HttpEntity<StockReservationRequest> entity = new HttpEntity<>(request, headers);
 
-        ResponseEntity<String> response = restTemplate.exchange("http://inventory-management-service/inventory/reserve", HttpMethod.POST, entity, String.class);
+        ResponseEntity<String> response = restTemplate.exchange("http://API-GATEWAY-SERVICE/inventory/reserve", HttpMethod.POST, entity, String.class);
 
         String body = response.getBody();
 

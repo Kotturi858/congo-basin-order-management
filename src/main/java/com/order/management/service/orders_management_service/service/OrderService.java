@@ -95,7 +95,7 @@ public class OrderService {
                     HttpHeaders headers = new HttpHeaders();
                     StockReservationRequest request = new StockReservationRequest(item.getProductId(), item.getQuantity(), item.getId().toString());
                     HttpEntity<StockReservationRequest> entity = new HttpEntity<>(request, headers);
-                    restTemplate.exchange("http://inventory-management-service/inventory/release", HttpMethod.POST, entity, String.class);
+                    restTemplate.exchange("http://api-gateway-service/inventory/release", HttpMethod.POST, entity, String.class);
                 } catch (HttpClientErrorException | HttpServerErrorException e) {
                     //implement a retry mechanism or log the error with exponential backoff
                     // else implement
@@ -108,7 +108,7 @@ public class OrderService {
 
     private boolean makePayment(Order order) {
         System.out.println("Processing payment for order ID: " + order.getId() + ", Amount: " + order.getTotalAmount());
-        Boolean isPaymentRecieved = restTemplate.getForObject("http://CONGO-BASIN-PAYMENT-SERVICE/api/fakePayment", Boolean.class);
+        Boolean isPaymentRecieved = restTemplate.getForObject("http://api-gateway-service/payments/fakePayment", Boolean.class);
         System.out.println("Payment status for order ID " + order.getId() + ": " + (Boolean.TRUE.equals(isPaymentRecieved) ? "Success" : "Failed"));
 
         if (Boolean.TRUE.equals(isPaymentRecieved)) {

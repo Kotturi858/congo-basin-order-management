@@ -17,7 +17,13 @@ resilience4j:
     instances:
       reserveStockBulkhead:
         maxConcurrentCalls: 10
-        maxWaitDuration: 500ms
+        maxWaitDuration: 5s
+  thread-pool-bulkhead:
+    instances:
+      reserveStockBulkhead:
+        maxThreadPoolSize: 10
+        coreThreadPoolSize: 5
+        queueCapacity: 20
   retry:
     instances:
       InventoryRetry:
@@ -27,7 +33,7 @@ resilience4j:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
         ignore-exceptions:
-          - com.example.demo.exception.BusinessException # replace with your actual exception
+           # replace with your actual exception
   timelimiter:
     instances:
       InventoryTimeout:
